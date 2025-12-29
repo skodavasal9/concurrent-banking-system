@@ -16,11 +16,12 @@ class Bank {
         ledger = new TransactionLedger();
         totalOutflows = new HashMap<>();
         scheduledTasks = new PriorityQueue<>(Comparator.comparingLong(task -> task.scheduledTime));
+
     }
 
-    public String createAccount(String id, int balance, long timestamp) {
+    public String createAccount(String id, int balance, long timestamp)  {
         if (accounts.containsKey(id)) {
-            return "false";
+            throw new AccountAlreadyExistsException(id);
         }
 
         User user = new User.Builder().userId("accUser1")
@@ -36,18 +37,25 @@ class Bank {
     }
 
     public String transfer(String fromId, String toId, int amount, long timestamp) {
-        processScheduledTasks(timestamp);
-        return executeTransfer(fromId, toId, amount, timestamp);
+        try {
+            processScheduledTasks(timestamp);
+            return executeTransfer(fromId, toId, amount, timestamp);
+        } catch (BankingException e) {
+            return "Transfer failed" + e.getMessage();
+        }
     }
 
-    // --- THE ENGINE (Your Original Transfer Code) ---
     private String executeTransfer(String fromId, String toId, int amount, long timestamp) {
-        if (!accounts.containsKey(fromId) || !accounts.containsKey(toId)) {
-            return "false";
+        if (!accounts.containsKey(fromId)) {
+            throw new AccountNotFoundException(fromId);
+        }
+
+        if (!accounts.containsKey(toId)) {
+            throw new AccountNotFoundException(toId);
         }
 
         if (fromId.equals(toId)) {
-            return "false";
+            throw new InvalidTransactionException(fromId, toId);
         }
 
         Account from = accounts.get(fromId);
@@ -55,7 +63,7 @@ class Bank {
 
         long fromAccBalance = from.balance;
         if (fromAccBalance < amount) {
-            return "false";
+            throw new InsufficientFundsException(fromId, fromAccBalance, amount);
         }
 
         Account firstLock = from.hashCode() < to.hashCode() ? from : to;
@@ -64,7 +72,7 @@ class Bank {
         synchronized (firstLock) {
             synchronized (secondLock) {
                 if (from.balance < amount) { // using your balance check
-                    return "false";
+                    throw new InsufficientFundsException(fromId, fromAccBalance, amount);
                 }
 
                 from.subtract(amount);
@@ -84,7 +92,6 @@ class Bank {
         }
     }
 
-    // --- YOUR ORIGINAL GET_HISTORY ---
     public String getHistory(String accountId, long timestamp) {
         processScheduledTasks(timestamp);
 
@@ -105,7 +112,7 @@ class Bank {
     public String topSpenders(int n, String timestamp) {
         processScheduledTasks(Long.parseLong(timestamp));
 
-        Comparator<Map.Entry<String, Long>> worstFirst =
+        Comparator<Map.Entry<String, Long>> comparator =
                 (e1, e2) -> {
                     int cmp = Long.compare(e1.getValue(), e2.getValue());
                     if (cmp != 0) return cmp;
@@ -113,7 +120,7 @@ class Bank {
                 };
 
         PriorityQueue<Map.Entry<String, Long>> heap =
-                new PriorityQueue<>(worstFirst);
+                new PriorityQueue<>(comparator);
 
         for (Map.Entry<String, Long> entry : totalOutflows.entrySet()) {
             heap.offer(entry);
@@ -145,8 +152,12 @@ class Bank {
     }
 
     public String schedulePayment(String fromId, String toId, int amount, long timestamp, int delay) {
-        if (!accounts.containsKey(fromId) || !accounts.containsKey(toId)) {
-            return "false";
+        if (!accounts.containsKey(fromId)) {
+            throw new AccountNotFoundException(fromId);
+        }
+
+        if (!accounts.containsKey(toId)) {
+            throw new AccountNotFoundException(toId);
         }
 
         scheduledTasks.offer(new ScheduledTask(fromId, toId, amount, timestamp + delay));
@@ -156,7 +167,6 @@ class Bank {
     private void processScheduledTasks(long currentTimestamp) {
         while (!scheduledTasks.isEmpty() && scheduledTasks.peek().scheduledTime <= currentTimestamp) {
             ScheduledTask task = scheduledTasks.poll();
-            // Calls executeTransfer logic directly
             executeTransfer(task.fromId, task.toId, task.amount, task.scheduledTime);
         }
     }
