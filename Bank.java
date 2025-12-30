@@ -8,15 +8,17 @@ class Bank {
     private Map<String, List<String>> userToAccounts;
     TransactionLedger ledger;
     private Map<String, Long> totalOutflows;
-    private PriorityQueue<ScheduledTask> scheduledTasks;
+    private PriorityQueue<Task> scheduledTasks;
+    private PriorityQueue<Task> skippedTasks;
+
 
     public Bank() {
         accounts = new HashMap<>();
         userToAccounts = new HashMap<>();
         ledger = new TransactionLedger();
         totalOutflows = new HashMap<>();
-        scheduledTasks = new PriorityQueue<>(Comparator.comparingLong(task -> task.scheduledTime));
-
+        scheduledTasks = new PriorityQueue<>(Comparator.comparingLong(task -> task.getScheduledTime()));
+        skippedTasks = new PriorityQueue<>(Comparator.comparingLong(task -> task.getScheduledTime()));
     }
 
     public String createAccount(String id, int balance, long timestamp)  {
@@ -160,14 +162,66 @@ class Bank {
             throw new AccountNotFoundException(toId);
         }
 
-        scheduledTasks.offer(new ScheduledTask(fromId, toId, amount, timestamp + delay));
+        Task.Builder task = new Task.Builder()
+                .fromId(fromId)
+                .toId(toId)
+                .amount(amount)
+                .scheduledTime(timestamp + delay)
+                .taskType("TRANSFER");
+        scheduledTasks.offer(task.build());
         return "true";
     }
 
     private void processScheduledTasks(long currentTimestamp) {
-        while (!scheduledTasks.isEmpty() && scheduledTasks.peek().scheduledTime <= currentTimestamp) {
-            ScheduledTask task = scheduledTasks.poll();
-            executeTransfer(task.fromId, task.toId, task.amount, task.scheduledTime);
+        List<Task> retryList = new ArrayList<>();
+
+        while (!scheduledTasks.isEmpty() && scheduledTasks.peek().getScheduledTime() <= currentTimestamp) {
+            Task task = scheduledTasks.poll();
+            if (task == null) continue;
+
+            try {
+                if (task.getTaskType().equals("TRANSFER")) {
+                    executeTransfer(task.getFromId(), task.getToId(), task.getAmount(), currentTimestamp);
+
+                    ledger.recordTransaction(new LogEntry(currentTimestamp,
+                            "Scheduled Transfer Successful", task.getFromId()), task.getFromId());
+                }
+            } catch (InsufficientFundsException e) {
+                // Check if we can retry
+                if (task.getRetryCount() < 3) {
+                    int delay = (int) Math.pow(2, task.getRetryCount() + 1) * 60;
+
+                    Task nextAttempt = new Task.Builder()
+                            .fromId(task.getFromId())
+                            .toId(task.getToId())
+                            .amount(task.getAmount())
+                            .scheduledTime(currentTimestamp + delay) // Scheduled for the FUTURE
+                            .retryCount(task.getRetryCount() + 1)
+                            .taskType(task.getTaskType())
+                            .build();
+
+                    retryList.add(nextAttempt); // Will go back to scheduledTasks
+
+                    ledger.recordTransaction(new LogEntry(currentTimestamp,
+                            "Insufficient Funds. Retry #" + nextAttempt.getRetryCount() + " scheduled.",
+                            task.getFromId()), task.getFromId());
+                } else {
+                    // retry attempts exhausted : Add to skippedTasks
+                    skippedTasks.offer(task);
+                    ledger.recordTransaction(new LogEntry(currentTimestamp,
+                            "CRITICAL: Max retries reached. Task moved to Skipped Queue.", task.getFromId()), task.getFromId());
+                }
+            } catch (BankingException e) {
+                // NON-RETRYABLE: Move to skippedTasks immediately
+                skippedTasks.offer(task);
+                ledger.recordTransaction(new LogEntry(currentTimestamp,
+                        "Task Aborted (Permanent Error): " + e.getMessage(), task.getFromId()), task.getFromId());
+            }
         }
+
+        // Only add the retryable tasks back to the main schedule
+        scheduledTasks.addAll(retryList);
     }
+
+
 }
