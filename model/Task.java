@@ -1,15 +1,17 @@
-package BankingSystem;
+package BankingSystem.model;
 
 public class Task {
+    private final int taskId;
     private final String fromId, toId;
     private final int amount;
     private final long scheduledTime;
-    private final String status;
+    private String status;
     private final String taskType;
     private final int retryCount;
     private static final int MAX_RETRIES = 3;
 
     private Task(Builder builder) {
+        this.taskId = builder.taskId;
         this.fromId = builder.fromId;
         this.toId = builder.toId;
         this.amount = builder.amount;
@@ -46,8 +48,17 @@ public class Task {
         return retryCount;
     }
 
+    public void setStatus(String status) {
+       this.status = status;
+    }
+
+    public int getTaskId() {
+        return taskId;
+    }
+
 
     public static class Builder {
+        private int taskId;
         private String fromId;
         private String toId;
         private int amount;
@@ -55,6 +66,11 @@ public class Task {
         private String status;
         private String taskType;
         private int retryCount = 0;
+
+        public Builder fromTaskId(int taskId) {
+            this.taskId = taskId;
+            return this;
+        }
 
         public Builder fromId(String fromId) {
             this.fromId = fromId;

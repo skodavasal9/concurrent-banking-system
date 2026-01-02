@@ -1,4 +1,4 @@
-package BankingSystem;
+package BankingSystem.model;
 
 public class LogEntry {
     long timestamp;
@@ -10,6 +10,8 @@ public class LogEntry {
         this.accountId = accountId;
     }
     public String getMessage() { return message; }
+    public String getAccountId() { return accountId; }
+    public long getTimestamp() { return timestamp; }
 }
 
 

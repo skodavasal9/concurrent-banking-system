@@ -1,4 +1,4 @@
-package BankingSystem;
+package BankingSystem.service;
 
 public class BankingException extends RuntimeException {
     public BankingException(String message) {

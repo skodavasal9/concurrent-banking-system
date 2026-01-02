@@ -1,4 +1,4 @@
-package BankingSystem;
+package BankingSystem.model;
 
 
 public class User {
@@ -18,6 +18,13 @@ public class User {
         this.userId = builder.userId;
         this.password = builder.password;
     }
+
+    public String getFirstName() { return firstName; }
+    public String getLastName() { return lastName; }
+    public String getEmail() { return email; }
+    public String getPhoneNumber() { return phoneNumber; }
+    public String getUserId() { return userId; }
+    public String getPassword() { return password; }
 
     public static class Builder {
         private String firstName;
