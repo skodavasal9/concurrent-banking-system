@@ -6,7 +6,7 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 
 public class DatabaseManager {
-    private static final String ACTUAL_PATH = "/Users/snigdhakodavasal/CodingFun/APITesting/banking.db";
+    private static final String ACTUAL_PATH = "banking.db";
     private static final String URL = "jdbc:sqlite:" + ACTUAL_PATH;
 
     public static Connection getConnection() throws SQLException {
